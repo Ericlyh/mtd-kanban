@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { getKanbanData, initKVData } from '../../lib/db'
-import type { Project, KanbanItem } from '../../lib/db'
+import { getKanbanData, initKVData } from '../../../lib/db'
+import type { Project, KanbanItem } from '../../../lib/db'
 
 const DEFAULT_PROJECTS: Project[] = [
   { id: 1, name: 'ai-agent-research', status: 'active', current_phase: 'Initial research' },

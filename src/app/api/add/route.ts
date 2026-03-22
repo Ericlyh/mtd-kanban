@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { addItem } from '../../lib/db'
+import { addItem } from '../../../lib/db'
 
 export async function POST(req: Request) {
   try {
