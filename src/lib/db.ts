@@ -12,18 +12,33 @@ function createRedisClient() {
 // Parse raw Upstash response - handles both parsed and raw formats
 function parseResponse<T>(data: any): T | null {
   if (data === null || data === undefined) return null
+  
+  // Handle string directly
   if (typeof data === 'string') {
     try { return JSON.parse(data) } catch { return data as any }
   }
-  // Upstash REST API returns { result: ... }
+  
+  // Handle Upstash REST API format { result: ... }
   if (data && typeof data === 'object' && 'result' in data) {
     const result = data.result
     if (result === null) return null
+    // Result might be a string that needs parsing
     if (typeof result === 'string') {
       try { return JSON.parse(result) } catch { return result as any }
     }
     return result as T
   }
+  
+  // Handle { value: ... } format from raw API SET
+  if (data && typeof data === 'object' && 'value' in data) {
+    const value = data.value
+    if (value === null) return null
+    if (typeof value === 'string') {
+      try { return JSON.parse(value) } catch { return value as any }
+    }
+    return value as T
+  }
+  
   return data as T
 }
 
