@@ -1,14 +1,30 @@
 import { Redis } from '@upstash/redis'
 
-// Initialize Upstash Redis client
-// Requires UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN environment variables
 function createRedisClient() {
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) {
-    throw new Error('Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN environment variables')
+    throw new Error('Missing UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN')
   }
   return new Redis({ url, token })
+}
+
+// Parse raw Upstash response - handles both parsed and raw formats
+function parseResponse<T>(data: any): T | null {
+  if (data === null || data === undefined) return null
+  if (typeof data === 'string') {
+    try { return JSON.parse(data) } catch { return data as any }
+  }
+  // Upstash REST API returns { result: ... }
+  if (data && typeof data === 'object' && 'result' in data) {
+    const result = data.result
+    if (result === null) return null
+    if (typeof result === 'string') {
+      try { return JSON.parse(result) } catch { return result as any }
+    }
+    return result as T
+  }
+  return data as T
 }
 
 export type Project = {
@@ -30,7 +46,6 @@ export type KanbanItem = {
   created_at: string
 }
 
-// Keys
 const KV_PROJECTS = 'kanban:projects'
 const KV_EVENTS = 'kanban:events'
 const KV_COUNTER = 'kanban:event_counter'
@@ -38,8 +53,9 @@ const KV_COUNTER = 'kanban:event_counter'
 export async function getProjects(): Promise<Project[]> {
   try {
     const redis = createRedisClient()
-    const data = await redis.get<Project[]>(KV_PROJECTS)
-    return data || []
+    const data = await redis.get(KV_PROJECTS)
+    const parsed = parseResponse<Project[]>(data)
+    return parsed || []
   } catch {
     return []
   }
@@ -48,8 +64,9 @@ export async function getProjects(): Promise<Project[]> {
 export async function getEvents(): Promise<KanbanItem[]> {
   try {
     const redis = createRedisClient()
-    const data = await redis.get<KanbanItem[]>(KV_EVENTS)
-    return data || []
+    const data = await redis.get(KV_EVENTS)
+    const parsed = parseResponse<KanbanItem[]>(data)
+    return parsed || []
   } catch {
     return []
   }
@@ -58,12 +75,12 @@ export async function getEvents(): Promise<KanbanItem[]> {
 export async function getKanbanData() {
   const [projects, events] = await Promise.all([getProjects(), getEvents()])
   
-  const blockers: any[] = []
   const todo = events.filter(e => e.kanban_column === 'todo').length
   const in_progress = events.filter(e => e.kanban_column === 'in_progress').length
   const done = events.filter(e => e.kanban_column === 'done').length
   
-  const stats = { total: events.length, todo, in_progress, done, openBlockers: blockers.length }
+  const stats = { total: events.length, todo, in_progress, done, openBlockers: 0 }
+  const blockers: any[] = []
   
   return { projects, events, stats, blockers }
 }
@@ -72,16 +89,18 @@ export async function moveItem(eventId: number, column: string) {
   const redis = createRedisClient()
   const events = await getEvents()
   const updated = events.map(e => e.id === eventId ? { ...e, kanban_column: column } : e)
-  await redis.set(KV_EVENTS, updated)
+  await redis.set(KV_EVENTS, JSON.stringify(updated))
 }
 
 export async function addItem(projectId: number, description: string, column: string, taskId?: string) {
   const redis = createRedisClient()
   const events = await getEvents()
-  const counter = await redis.get<number>(KV_COUNTER) || 0
+  const counterData = await redis.get(KV_COUNTER)
+  const counter = parseResponse<number>(counterData) || 0
   const nextId = counter + 1
   
-  const project = (await getProjects()).find(p => p.id === projectId)
+  const projects = await getProjects()
+  const project = projects.find(p => p.id === projectId)
   
   const newEvent: KanbanItem = {
     id: nextId,
@@ -95,7 +114,7 @@ export async function addItem(projectId: number, description: string, column: st
     created_at: new Date().toISOString()
   }
   
-  await redis.set(KV_EVENTS, [...events, newEvent])
+  await redis.set(KV_EVENTS, JSON.stringify([...events, newEvent]))
   await redis.set(KV_COUNTER, nextId)
 }
 
@@ -106,13 +125,14 @@ export async function initKVData(defaultProjects: Project[], defaultEvents: Kanb
       redis.get(KV_PROJECTS),
       redis.get(KV_EVENTS)
     ])
-    if (!existingProjects) {
-      await redis.set(KV_PROJECTS, defaultProjects)
-      await redis.set(KV_EVENTS, defaultEvents)
+    const projParsed = parseResponse(existingProjects)
+    const evtParsed = parseResponse(existingEvents)
+    if (!projParsed) {
+      await redis.set(KV_PROJECTS, JSON.stringify(defaultProjects))
+      await redis.set(KV_EVENTS, JSON.stringify(defaultEvents))
       await redis.set(KV_COUNTER, defaultEvents.length)
     }
-    // Only init events if both are missing (preserve existing events)
   } catch {
-    // Silently fail if Redis not configured
+    // Silently fail
   }
 }
