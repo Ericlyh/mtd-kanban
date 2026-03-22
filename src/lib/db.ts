@@ -102,12 +102,16 @@ export async function addItem(projectId: number, description: string, column: st
 export async function initKVData(defaultProjects: Project[], defaultEvents: KanbanItem[]) {
   try {
     const redis = createRedisClient()
-    const existing = await redis.get(KV_PROJECTS)
-    if (!existing) {
+    const [existingProjects, existingEvents] = await Promise.all([
+      redis.get(KV_PROJECTS),
+      redis.get(KV_EVENTS)
+    ])
+    if (!existingProjects) {
       await redis.set(KV_PROJECTS, defaultProjects)
       await redis.set(KV_EVENTS, defaultEvents)
       await redis.set(KV_COUNTER, defaultEvents.length)
     }
+    // Only init events if both are missing (preserve existing events)
   } catch {
     // Silently fail if Redis not configured
   }
