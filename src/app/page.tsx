@@ -7,7 +7,8 @@ type KanbanItem = {
   id: number; project: string; project_id: number; description: string
   task_id: string | null; kanban_column: string; created_at: string
 }
-type Data = { projects: Project[]; events: KanbanItem[]; stats: any }
+type Blocker = { blocker_text: string; project: string; created_at: string }
+type Data = { projects: Project[]; events: KanbanItem[]; stats: any; blockers: Blocker[] }
 
 const COLS = [
   { id: 'todo', label: 'Todo', cls: 'col-todo', numCls: 'blue' },

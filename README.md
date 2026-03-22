@@ -1,66 +1,50 @@
 # MakeThingsDone Kanban
 
-Event-driven Kanban board powered by MTD agent. Read from Vercel KV, synced from MTD's SQLite event database.
+Event-driven Kanban board powered by MTD agent. Uses Upstash Redis for storage.
 
 ## Setup
 
-### 1. Create Vercel KV Database
+### 1. Create Upstash Redis Database (Free)
 
+1. Go to https://console.upstash.com
+2. Sign up (free tier: 10K commands/day)
+3. Create a new Redis database
+4. Copy `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
+
+### 2. Deploy to Vercel
+
+**Option A: Via Vercel Dashboard**
+1. Go to https://vercel.com/new
+2. Import `Ericlyh/mtd-kanban`
+3. Add environment variables:
+   - `UPSTASH_REDIS_REST_URL` = (from Upstash)
+   - `UPSTASH_REDIS_REST_TOKEN` = (from Upstash)
+4. Deploy
+
+**Option B: Via Vercel API (MTD uses this)**
 ```bash
-# Install Vercel CLI
-npm i -g vercel
-
-# Login
-vercel login
-
-# Create KV database
-vercel kv create kanban
+curl -X POST "https://api.vercel.com/v13/deployments" \
+  -H "Authorization: Bearer $VERCEL_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "mtd-kanban", "gitSource": {"type": "github", "repo": "Ericlyh/mtd-kanban", "ref": "main", "repoId": 1188501793}}'
 ```
 
-This gives you:
-- `KV_REST_API_URL`
-- `KV_REST_API_TOKEN`
+### 3. MTD Sync (optional — push local events to cloud)
 
-### 2. Add Environment Variables in Vercel
-
-Go to your Vercel project → Settings → Environment Variables:
-- `KV_REST_API_URL` = your KV_REST_API_URL
-- `KV_REST_API_TOKEN` = your KV_REST_API_TOKEN
-
-### 3. Deploy
+After deploying, run the sync script to push MTD's SQLite events to Upstash:
 
 ```bash
-npm install
-npm run build
-vercel deploy
+export UPSTASH_REDIS_REST_URL="https://..."
+export UPSTASH_REDIS_REST_TOKEN="..."
+./scripts/sync-to-upstash.sh
 ```
 
-Or connect the GitHub repo to Vercel for auto-deploy on push.
+## MTD → Kanban Sync
 
-### 4. Configure MTD Sync (on container)
-
-Add to MTD's cron or run manually:
-
-```bash
-./scripts/sync-to-vercel.sh <KV_REST_API_URL> <KV_REST_API_TOKEN>
-```
-
-Or set environment variables:
-```bash
-export KV_REST_API_URL="https://..."
-export KV_REST_API_TOKEN="..."
-./scripts/sync-to-vercel.sh
-```
-
-## MTD Agent Sync (for Ethan)
-
-MTD logs events to `events/events.db` in its workspace. Run the sync script to push events to the Vercel KV store.
-
-Add to MTD AGENTS.md workflow: after logging significant events, optionally trigger sync.
+MTD logs events to `events/events.db`. The sync script exports them to Upstash Redis.
 
 ## Tech Stack
 
-- **Frontend:** Next.js 14 (App Router)
-- **Database:** Vercel KV (serverless Redis)
-- **Styling:** Vanilla CSS (no Tailwind)
-- **Sync:** Bash script → Vercel KV REST API
+- **Frontend:** Next.js 14 (App Router), vanilla CSS
+- **Database:** Upstash Redis (serverless, free tier)
+- **Sync:** Bash script → Upstash REST API
